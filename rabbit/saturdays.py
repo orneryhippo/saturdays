@@ -52,45 +52,54 @@ def __ksunpack(bits):
 			ks.append(_ks[i])
 	return ks
 
+
+def __except_for(mask , pred):
+	""" return a tuple that excludes the items where the bits of mask {0..7} are 0
+	If mask is 0 then this pred is unsatisfiable under given conditions. 
+	Probably should throw an exception under this case.
+	"""
+	x4 = []
+	s,m,l= pred	
+	if 4 & mask:
+		x4.append(s)
+	if 2 & mask:
+		x4.append(m)
+	if 1 & mask:
+		x4.append(l)
+	
+	return tuple(x4) 
+
+
+def __masked(pred_id):
+	p = __predlist[pred_id]
+	m = __masks[pred_id]
+	return __except_for(m,p)
+
 ## work in progress--new version not assuming pred is len 3
-def __vcounts(predlist):
-	var_ct = [] 
-	trues = []
-	falses = []
+def __vcounts(unsat):
+	var_ct = [] 	
 	for i in range(__nvars):
 		var_ct.append(([],[])) #false list, true list
 	
-	for i,pred in enumerate(predlist):
+	for i,pred in enumerate(unsat):
 		p = []
-		for v in pred:
+		for v in __masked(i):
 			p.append(int((1+sgn(v))/2))
 		
 		ks = [p]
-		#print(i,a,b,c)
-		#ks = __ksunpack(pred[3]) # this may lead to redundancy, but it's already in place. If desired, make the predlist simply 2**x values
 		for k in ks:	
-			for j in range(len(p)):		
-				var_ct[abs(p[j])][k[0]].append(tuple(pred)) #this puts the val of pk in v[a] true or false list based on the value of k[0]
+			
+			masked = __masked(i)
+			#print(masked)
+			for j in range(len(masked)):		
+				#this puts the val of pk in v[a] true or false list based on the value of k[0]
+				var_index = abs(masked[j])
+				siglist = k[0]
+				#print(var_index, siglist,i)
+				var_ct[var_index][siglist].append(i) 
+	#print(var_ct)
 	return tuple(var_ct)
 
-def __vcounts(predlist):
-	var_ct = [] 
-	trues = []
-	falses = []
-	for i in range(__nvars):
-		var_ct.append(([],[])) #false list, true list
-	
-	for i,pred in enumerate(predlist):
-		small,med,large = pred
-		ks = [[int((1+sgn(small))/2),int((1+sgn(med))/2),int((1+sgn(large))/2)]]
-		#print(i,a,b,c)
-		#ks = __ksunpack(pred[3]) # this may lead to redundancy, but it's already in place. If desired, make the predlist simply 2**x values
-		for k in ks:			
-			var_ct[abs(small)][k[0]].append(tuple(pred)) #this puts the val of pk in v[a] true or false list based on the value of k[0]
-			var_ct[abs(med)][k[1]].append(tuple(pred))
-			var_ct[abs(large)][k[2]].append(tuple(pred))
-
-	return tuple(var_ct)
 
 def __calc_anticorrelations(pl):
 	ac = [] 
@@ -117,7 +126,7 @@ def __reset__(nvars = None, pvratio = None):
 	if nvars:
 		__nvars = nvars
 	else:
-		__nvars = 100
+		__nvars = 10
 
 	if pvratio:
 		__pvratio = pvratio
@@ -128,10 +137,10 @@ def __reset__(nvars = None, pvratio = None):
 	__BLOCKED = 2**4 - 1
 	__assignments = []
 	__predlist = __make_preds(__nvars,__pvratio)
-	__anticorrelations = __calc_anticorrelations(__predlist)
+	#__anticorrelations = __calc_anticorrelations(__predlist)
 	__unsat = list(__predlist)
-	__vars = __vcounts(__predlist) # [[None] * __nvars,[None] * __nvars] #false_list, true_list
-	__masks = [0] * len(__predlist)
+	__vars = __vcounts(range(__nvars)) # [[None] * __nvars,[None] * __nvars] #false_list, true_list
+	__masks = [7] * len(__predlist)
 
 
 
@@ -147,41 +156,78 @@ def __findmax(blist):
 	return fidx,maxf,tidx,maxt
 
 
-def __reduce_list():
-	""" rewrite this with __masks and __assignments
-	pc = pl.copy()
-	vsat=[]
-	vc = vcounts(pl, nvars)
-	mf,fc,mt,tc = findmax(vc)
-	if short_circuit and fc ==1 and tc == 1:
-		print("singles")
-		return {},vsol
-	if fc > tc:		
-		k = vc[mf][0]
-		vsol[mf] = 0
-	else:
-		k = vc[mt][1]
-		vsol[mt] = 1
-	for p in k:
-		pc.pop(p)
-	return pc,vsol
-	"""
-	# for pred in predlist:
-	# 
+
+def __findmax(blist):
+	maxf = 0
+	maxt = 0
+	false_ct = 0
+	true_ct = 0
+	for i,b in enumerate(blist):
+		#print(i,b)
+		if len(b[0]) > false_ct:
+			false_ct = len(b[0])
+			maxf = i
+		if len(b[1]) > true_ct:
+			true_ct = len(b[1])
+			maxt = i
+	return maxf,false_ct,maxt,true_ct
+
+def __reduce_vars(vars,denied):
+	#print(pred,__predlist[pred], denied)
 	pass
 
-def except_for(mask , pred):
-	""" return a tuple that excludes the items where the bits of mask {0..7} are 0
-	If mask is 0 then this pred is unsatisfiable under given conditions. 
-	Probably should throw an exception under this case.
-	"""
-	x4 = []
-	s,m,l= pred	
-	if 4 & mask:
-		x4.append(s)
-	if 2 & mask:
-		x4.append(m)
-	if 1 & mask:
-		x4.append(l)
-	
-	return tuple(x4) 
+def __reduce_list(unsat,vsol,short_circuit=False):
+	vc = __vcounts(unsat)
+	denied = -1
+	maxf,false_ct,maxt,true_ct = __findmax(vc) #$
+	print(maxf,false_ct,maxt,true_ct)
+	if short_circuit and false_ct ==1 and true_ct == 1:
+		print("singles")
+		return ([],vsol)
+	if false_ct > true_ct:		
+		dependent_preds = vc[maxf][0]
+		denied = maxt
+		denied_preds = vc[maxf][1]
+		vsol[maxf] = 0
+		vc[maxf][0] = vc[maxf][1] = []
+	else:
+		dependent_preds = vc[maxt][1]
+		denied = maxf
+		denied_preds = vc[maxt][0]
+		vsol[maxt] = 1
+		vc[maxt][0] = vc[maxt][1] = []
+	for pred in dependent_preds:
+		#print(pred)
+		if pred in unsat:
+			#print("satisifed:",pred)
+			unsat.remove(pred)
+	for pred in denied_preds:
+		if denied in __masked(pred):
+			__reduce_vars(pred,denied)
+	return unsat,vsol
+
+def __bound(cert):
+	for i in cert:
+		if None == i:
+			return False
+	return True
+
+def solve(short_circuit=False):
+	vsol = [None] * __nvars
+	lpl = len(__predlist)
+	lpl0 = 0
+	unsat = list(range(len(__predlist)))
+	for pred in __predlist:
+		#print(vsol)
+		unsat,vsol = __reduce_list(unsat,vsol)
+		lpl = len(unsat)
+		if lpl > 0 and __bound(vsol):
+			print("not satisfied. remainder:", unsat)
+			return unsat,vsol
+		lpl0 = lpl
+	return unsat,vsol
+
+def trial(n,p):
+	__reset__(n,p)
+	return solve()
+
