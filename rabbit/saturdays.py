@@ -294,14 +294,17 @@ def __reduce_list(unsat,vsol,short_circuit=False):
 		unsat.remove(p)
 	return unsat,vsol
 
-def __bound(cert):
-	for i in cert:
-		if None == i:
-			return False
-	return True
+
+def frees():
+	for i in range(__nvars):
+		if None == __vars[i].truth():
+			yield i
+
+def __bound():
+	return 1 > len(list(frees()))
 
 def solve(short_circuit=False):
-	vc = __vars
+	vsol = __vars
 
 	lpl = len(__predlist)
 	lpl0 = 0
@@ -310,7 +313,7 @@ def solve(short_circuit=False):
 		#print(vsol)
 		unsat,vsol = __reduce_list(unsat,vsol)
 		lpl = len(unsat)
-		if lpl > 0 and __bound(vsol):
+		if lpl > 0 and __bound():
 			print("not satisfied. remainder:", unsat)
 			return unsat,vsol
 		lpl0 = lpl
@@ -319,11 +322,5 @@ def solve(short_circuit=False):
 def trial(n,p):
 	__reset__(n,p)
 	return solve()
-
-def frees():
-	for i in range(__nvars):
-		if None == __vars[i].truth():
-			yield i
-
 
 
