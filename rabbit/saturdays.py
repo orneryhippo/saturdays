@@ -1,6 +1,113 @@
 from random import randrange
 from datetime import datetime
+from math import pi
 
+class vmeta():
+	from math import pi
+
+	def __init__(self):
+		self.truthval = None
+		self.trues = []
+		self.falses = []
+		self.tct = 0
+		self.fct = 0
+
+	def truth(self, v = None):
+		if None == v:
+			return self.truthval
+		else:
+			if self.truthval == None:
+				self.truthval = v
+			else:
+				raise RuntimeError("Can't change truthvalue from {0} to {1}".format(self.truthval,v))
+
+	def clear(self):
+		self.__init__()
+
+	def mag(self):
+		t = self.tc()
+		f = self.fc()
+		return (t+f)
+
+	def theta(self):
+		return pi * self.bayes()
+
+	def bayes(self):
+		t = self.tc()
+		m = self.mag()
+		return (t/float(m))
+
+	def tc(self):
+		if self.trues:
+			return self.tct
+		else:
+			return 0
+
+	def fc(self):
+		if self.falses:
+			return self.fct
+		else:
+			return 0
+
+	def _add_trues(self,predlist):		
+		for p in predlist:
+			self.trues.append(p)
+			self.tct += 1
+
+	def _rem_trues(self, predlist):
+		for p in predlist:
+			if p in self.trues:
+				self.trues.remove(p)
+				self.tct -= 1
+	
+	def _add_falses(self,predlist):
+		for p in predlist:
+			self.falses.append(p)
+			self.fct += 1
+
+	def _rem_falses(self,predlist):
+		for p in predlist:
+			if p in self.falses:
+				self.falses.remove(p)
+				self.fct -= 1
+
+	def add(self, which, predlist):
+		if type(predlist) != list:
+			pl = [predlist]
+		else:
+			pl = predlist
+		if which:
+			self._add_trues(pl)
+		else:
+			self._add_falses(pl)
+
+	def remove(self, which, predlist):
+		if type(predlist) != list:
+			pl = [predlist]
+		else:
+			pl = predlist
+		if which:
+			self._rem_trues(pl)
+		else:
+			self._rem_falses(pl)
+			
+
+	def get(self,which=None):
+		if None == which:
+			return (self.trues,self.falses)
+		elif True == which:
+			return self.trues
+		else:
+			return self.falses
+
+
+def testv():
+	v = vmeta()	
+	v.add(True, [1,2,3])
+	v.add(False, [7,8,9,10])
+	v.remove(True,2)
+	v.remove(False, [8,10])
+	return v.get()
 
 def rsgn():
 	return (2*flip() - 1)
@@ -75,30 +182,6 @@ def __masked(pred_id):
 	m = __masks[pred_id]
 	return __except_for(m,p)
 
-## work in progress--new version not assuming pred is len 3
-def __vcounts(unsat):
-	var_ct = [] 	
-	for i in range(__nvars):
-		var_ct.append(([],[])) #false list, true list
-	
-	for i,pred in enumerate(unsat):
-		p = []
-		for v in __masked(i):
-			p.append(int((1+sgn(v))/2))
-		
-		ks = [p]
-		for k in ks:	
-			
-			masked = __masked(i)
-			#print(masked)
-			for j in range(len(masked)):		
-				#this puts the val of pk in v[a] true or false list based on the value of k[0]
-				var_index = abs(masked[j])
-				siglist = k[0]
-				#print(var_index, siglist,i)
-				var_ct[var_index][siglist].append(i) 
-	#print(var_ct)
-	return tuple(var_ct)
 
 
 def __calc_anticorrelations(pl):
@@ -119,7 +202,22 @@ def __calc_anticorrelations(pl):
 		ac.append(rac)
 	return ac
 
-
+def __vcounts(vs = None):
+	if None == vs:
+		vnew = []
+		vc = __nvars
+		for v in vc:
+			vnew.append(vmeta())
+		vs = vnew
+	else:
+		vc = len(vs)
+		for v in vs:
+			v.clear()
+	for i,p in enumerate(masked(__predlist)):
+		for c in p:
+			vdx = abs(c)
+			vs[vdx].add(sgn(c) > 0,i)
+	return vs
 
 def __reset__(nvars = None, pvratio = None):
 	global __nvars, __predlist, __vars, __masks, __TAUT, __BLOCKED, __unsat, __assignments, __anticorrelations
@@ -139,21 +237,9 @@ def __reset__(nvars = None, pvratio = None):
 	__predlist = __make_preds(__nvars,__pvratio)
 	#__anticorrelations = __calc_anticorrelations(__predlist)
 	__unsat = list(__predlist)
-	__vars = __vcounts(range(__nvars)) # [[None] * __nvars,[None] * __nvars] #false_list, true_list
+	__vars = __vcounts()
 	__masks = [7] * len(__predlist)
 
-
-
-def __findmax(blist):
-	maxf = maxt = fidx = tidx = 0
-	for i,b in enumerate(blist):
-		if len(b[0]) > mf:
-			maxf = len(b[0])
-			fidx = i
-		if len(b[1]) > mt:
-			maxt = len(b[1])
-			tidx = i
-	return fidx,maxf,tidx,maxt
 
 
 
@@ -163,12 +249,13 @@ def __findmax(blist):
 	false_ct = 0
 	true_ct = 0
 	for i,b in enumerate(blist):
-		#print(i,b)
-		if len(b[0]) > false_ct:
-			false_ct = len(b[0])
+		fct = b.fc()
+		tct = b.tc()
+		if fct > false_ct:
+			false_ct = fct
 			maxf = i
-		if len(b[1]) > true_ct:
-			true_ct = len(b[1])
+		if tct > true_ct:
+			true_ct = tct
 			maxt = i
 	return maxf,false_ct,maxt,true_ct
 
@@ -176,34 +263,35 @@ def __reduce_vars(vars,denied):
 	#print(pred,__predlist[pred], denied)
 	pass
 
+def __mask(pred,denied):
+	print(pred,denied)
+
+def __reduction_list(predlist):
+	vs = set()
+	for p in predlist:
+		for c in p:
+			vs.add(c)
+	return vs
+
 def __reduce_list(unsat,vsol,short_circuit=False):
-	vc = __vcounts(unsat)
+	vc = __vcounts(unsat,vsol)
 	denied = -1
 	maxf,false_ct,maxt,true_ct = __findmax(vc) #$
 	print(maxf,false_ct,maxt,true_ct)
-	if short_circuit and false_ct ==1 and true_ct == 1:
-		print("singles")
-		return ([],vsol)
-	if false_ct > true_ct:		
-		dependent_preds = vc[maxf][0]
-		denied = maxt
-		denied_preds = vc[maxf][1]
-		vsol[maxf] = 0
-		vc[maxf][0] = vc[maxf][1] = []
+	if true_ct > false_ct:
+		remflag = True
+		predlist = vsol[maxt].get(True)
+		vsol[maxt].truthval(True)
 	else:
-		dependent_preds = vc[maxt][1]
-		denied = maxf
-		denied_preds = vc[maxt][0]
-		vsol[maxt] = 1
-		vc[maxt][0] = vc[maxt][1] = []
-	for pred in dependent_preds:
-		#print(pred)
-		if pred in unsat:
-			#print("satisifed:",pred)
-			unsat.remove(pred)
-	for pred in denied_preds:
-		if denied in __masked(pred):
-			__reduce_vars(pred,denied)
+		remflag = False
+		predlist = vsol[maxf].get(False)
+		vsol[maxf].truthval(False)
+
+	redl = __reduction_list(predlist)
+	for v in redl:
+		v[abs(v)].remove(remflag, predlist)
+	for p in predlist:
+		unsat.remove(p)
 	return unsat,vsol
 
 def __bound(cert):
@@ -213,7 +301,8 @@ def __bound(cert):
 	return True
 
 def solve(short_circuit=False):
-	vsol = [None] * __nvars
+	vc = __vars
+
 	lpl = len(__predlist)
 	lpl0 = 0
 	unsat = list(range(len(__predlist)))
@@ -230,4 +319,11 @@ def solve(short_circuit=False):
 def trial(n,p):
 	__reset__(n,p)
 	return solve()
+
+def frees():
+	for i in range(__nvars):
+		if None == __vars[i].truth():
+			yield i
+
+
 
