@@ -282,10 +282,14 @@ def __reduce_list(unsat,vsol,short_circuit=False):
 		remflag = True
 		predlist = vsol[maxt].get(True)
 		vsol[maxt].truthval(True)
+		__assignments.append(maxt)
+		new_masks = vsol[maxt].get(False)
 	else:
 		remflag = False
 		predlist = vsol[maxf].get(False)
-		vsol[maxf].truthval(False)
+		vsol[maxf].truthval(False)		
+		__assignments.append(maxf)
+		new_masks = vsol[maxf].get(True)
 
 	redl = __reduction_list(predlist)
 	for v in redl:
